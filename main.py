@@ -65,7 +65,9 @@ def validate_business_rules(start_utc: datetime, end_utc: datetime) -> None:
     if start_utc >= end_utc:
         raise HTTPException(status_code=400, detail="Start time must be before end time.")
 
-    if start_utc < now_utc():
+    now = now_utc()
+    now_floor_to_minute = now.replace(second=0, microsecond=0)
+    if start_utc < now_floor_to_minute:
         raise HTTPException(status_code=400, detail="Reservation start time cannot be in the past.")
 
     duration = end_utc - start_utc
