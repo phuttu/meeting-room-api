@@ -25,6 +25,7 @@ def now_utc() -> datetime:
 
 
 def ensure_room(room_id: str) -> str:
+    room_id = room_id.upper()
     if room_id not in ROOMS:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
