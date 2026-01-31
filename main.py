@@ -69,7 +69,14 @@ def validate_business_rules(start_utc: datetime, end_utc: datetime) -> None:
     now_floor_to_minute = now.replace(second=0, microsecond=0)
     if start_utc < now_floor_to_minute:
         raise HTTPException(status_code=400, detail="Reservation start time cannot be in the past.")
-
+    
+    # Allow reservations only in 30-minute blocks (xx:00 or xx:30)
+    if start_utc.minute % 30 != 0 or end_utc.minute % 30 != 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Reservations must start and end at 30-minute intervals (xx:00 or xx:30)."
+        )
+    
     duration = end_utc - start_utc
     if duration < MIN_DURATION:
         raise HTTPException(status_code=400, detail="Reservation duration must be at least 30 minutes.")
