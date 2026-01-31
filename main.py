@@ -25,6 +25,7 @@ def now_utc() -> datetime:
 
 
 def ensure_room(room_id: str) -> str:
+    room_id = room_id.upper()
     if room_id not in ROOMS:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -65,18 +66,27 @@ def validate_business_rules(start_utc: datetime, end_utc: datetime) -> None:
     if start_utc >= end_utc:
         raise HTTPException(status_code=400, detail="Start time must be before end time.")
 
-    if start_utc < now_utc():
+    now = now_utc()
+    now_floor_to_minute = now.replace(second=0, microsecond=0)
+    if start_utc < now_floor_to_minute:
         raise HTTPException(status_code=400, detail="Reservation start time cannot be in the past.")
-
+    
+    # Convert to Helsinki local time for local rules (also used for business-hour checks)
+    start_local = to_helsinki(start_utc)
+    end_local = to_helsinki(end_utc)
+    
+    # Allow reservations only in 30-minute blocks in Helsinki local time (xx:00 or xx:30)
+    if start_local.minute % 30 != 0 or end_local.minute % 30 != 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Reservations must start and end at 30-minute intervals (xx:00 or xx:30)."
+        )
+    
     duration = end_utc - start_utc
     if duration < MIN_DURATION:
         raise HTTPException(status_code=400, detail="Reservation duration must be at least 30 minutes.")
     if duration > MAX_DURATION:
         raise HTTPException(status_code=400, detail="Reservation duration must be at most 8 hours.")
-
-    # Business hours check in Helsinki local time
-    start_local = to_helsinki(start_utc)
-    end_local = to_helsinki(end_utc)
 
     # Enforce that reservation stays within a single local day (practical for office hours)
     if start_local.date() != end_local.date():
