@@ -172,10 +172,11 @@ def to_response(r: Reservation) -> ReservationResponse:
     response_model=ReservationResponse,
     status_code=status.HTTP_201_CREATED,
 )
+
 def create_reservation(
     room_id: str = Path(..., description="Room id (A or B)"),
     body: CreateReservationRequest = ...,
-):
+) -> ReservationResponse:
     room = ensure_room(room_id)
     start_utc = parse_iso_to_utc(body.start)
     end_utc = parse_iso_to_utc(body.end)
@@ -183,18 +184,22 @@ def create_reservation(
     return to_response(created)
 
 
-@app.get("/rooms/{room_id}/reservations", response_model=list[ReservationResponse])
-def list_reservations(room_id: str = Path(..., description="Room id (A or B)")):
+@app.get(
+    "/rooms/{room_id}/reservations",
+    response_model=list[ReservationResponse],
+)
+
+def list_reservations(
+    room_id: str = Path(..., description="Room id (A or B)")
+) -> list[ReservationResponse]:
     room = ensure_room(room_id)
     reservations = store.list_room(room)
     return [to_response(r) for r in reservations]
 
-
-@app.delete("/rooms/{room_id}/reservations/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_reservation(
     room_id: str = Path(..., description="Room id (A or B)"),
     reservation_id: str = Path(..., description="Reservation id (UUID)"),
-):
+) -> None:
     room = ensure_room(room_id)
     store.delete(room, reservation_id)
     return None
