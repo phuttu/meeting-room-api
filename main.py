@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from threading import Lock
-from typing import Final
+from typing import Dict, Final, List
 from uuid import uuid4
 
 from zoneinfo import ZoneInfo
