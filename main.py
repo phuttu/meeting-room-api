@@ -145,6 +145,169 @@ def overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datet
     return a_start < b_end and b_start < a_end
 
 
+def validate_time_order(start_utc: datetime, end_utc: datetime) -> None:
+    """
+    Validates that the reservation start time is before the end time.
+
+    Parameters
+    ----------
+    start_utc: datetime
+        Reservation start time in UTC.
+    end_utc: datetime
+        Reservation end time in UTC.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If start time is not before end time.
+    """
+    if start_utc >= end_utc:
+        raise HTTPException(status_code=400, detail="Start time must be before end time.")
+
+
+def validate_not_in_past(start_utc: datetime) -> None:
+    """
+    Validates that the reservation start time is not in the past.
+
+    The current time is floored to the minute to allow a reservation
+    starting at the current minute.
+
+    Parameters
+    ----------
+    start_utc: datetime
+        Reservation start time in UTC.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If the reservation start time is in the past.
+    """
+    now = now_utc()
+    now_floor_to_minute = now.replace(second=0, microsecond=0)
+    if start_utc < now_floor_to_minute:
+        raise HTTPException(status_code=400, detail="Reservation start time cannot be in the past.")
+
+
+def validate_30_min_blocks_local(start_local: datetime, end_local: datetime) -> None:
+    """
+    Validates that reservation start and end times align to 30-minute blocks
+    in Europe/Helsinki local time.
+
+    Parameters
+    ----------
+    start_local: datetime
+        Reservation start time in Europe/Helsinki local time.
+    end_local: datetime
+        Reservation end time in Europe/Helsinki local time.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If start or end time is not at xx:00 or xx:30 local time.
+    """
+    if start_local.minute % 30 != 0 or end_local.minute % 30 != 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Reservations must start and end at 30-minute intervals (xx:00 or xx:30).",
+        )
+
+
+def validate_duration_limits(start_utc: datetime, end_utc: datetime) -> None:
+    """
+    Validates that reservation duration is within allowed limits.
+
+    Parameters
+    ----------
+    start_utc: datetime
+        Reservation start time in UTC.
+    end_utc: datetime
+        Reservation end time in UTC.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If the duration is shorter than 30 minutes or longer than 8 hours.
+    """
+    duration = end_utc - start_utc
+    if duration < MIN_DURATION:
+        raise HTTPException(status_code=400, detail="Reservation duration must be at least 30 minutes.")
+    if duration > MAX_DURATION:
+        raise HTTPException(status_code=400, detail="Reservation duration must be at most 8 hours.")
+
+
+def validate_single_local_day(start_local: datetime, end_local: datetime) -> None:
+    """
+    Validates that the reservation stays within a single local day.
+
+    Parameters
+    ----------
+    start_local: datetime
+        Reservation start time in Europe/Helsinki local time.
+    end_local: datetime
+        Reservation end time in Europe/Helsinki local time.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If the reservation spans multiple local dates.
+    """
+    if start_local.date() != end_local.date():
+        raise HTTPException(status_code=400, detail="Reservation must be within a single local day (Europe/Helsinki).")
+
+
+def validate_business_hours_local(start_local: datetime, end_local: datetime) -> None:
+    """
+    Validates that the reservation is within office hours in local time.
+
+    Office hours are 08:00–16:00 (Europe/Helsinki). Start at exactly 16:00
+    is not allowed because the office closes at that time.
+
+    Parameters
+    ----------
+    start_local: datetime
+        Reservation start time in Europe/Helsinki local time.
+    end_local: datetime
+        Reservation end time in Europe/Helsinki local time.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If the reservation start or end is outside office hours, or starts at 16:00.
+    """
+    if not (BUSINESS_START <= start_local.timetz().replace(tzinfo=None) <= BUSINESS_END):
+        raise HTTPException(status_code=400, detail="Reservation start must be within office hours 08:00–16:00.")
+
+    if not (BUSINESS_START <= end_local.timetz().replace(tzinfo=None) <= BUSINESS_END):
+        raise HTTPException(status_code=400, detail="Reservation end must be within office hours 08:00–16:00.")
+
+    if start_local.time() == BUSINESS_END:
+        raise HTTPException(status_code=400, detail="Reservation cannot start at 16:00 (office closes).")
+
+
 def validate_business_rules(start_utc: datetime, end_utc: datetime) -> None:
     """
     Validates business rules for a room reservation time interval.
@@ -167,52 +330,18 @@ def validate_business_rules(start_utc: datetime, end_utc: datetime) -> None:
     Raises
     ------
     HTTPException
-        If any of the business rules are violated, including:
-        - start time is not before end time
-        - reservation starts in the past
-        - times are not aligned to 30-minute blocks (xx:00 or xx:30)
-        - duration is shorter than 30 minutes or longer than 8 hours
-        - reservation spans multiple local days
-        - reservation is outside office hours (08:00–16:00 Europe/Helsinki)
-        - reservation starts at closing time (16:00)
+        If any of the business rules are violated.
     """
-    if start_utc >= end_utc:
-        raise HTTPException(status_code=400, detail="Start time must be before end time.")
+    validate_time_order(start_utc, end_utc)
+    validate_not_in_past(start_utc)
 
-    now = now_utc()
-    now_floor_to_minute = now.replace(second=0, microsecond=0)
-    if start_utc < now_floor_to_minute:
-        raise HTTPException(status_code=400, detail="Reservation start time cannot be in the past.")
-    
-    # Convert to Helsinki local time for local rules (also used for business-hour checks)
     start_local = to_helsinki(start_utc)
     end_local = to_helsinki(end_utc)
 
-    # Allow reservations only in 30-minute blocks in Helsinki local time (xx:00 or xx:30)    
-    if start_local.minute % 30 != 0 or end_local.minute % 30 != 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Reservations must start and end at 30-minute intervals (xx:00 or xx:30)."
-        )
-    
-    duration = end_utc - start_utc
-    if duration < MIN_DURATION:
-        raise HTTPException(status_code=400, detail="Reservation duration must be at least 30 minutes.")
-    if duration > MAX_DURATION:
-        raise HTTPException(status_code=400, detail="Reservation duration must be at most 8 hours.")
-
-    # Enforce that reservation stays within a single local day (practical for office hours)
-    if start_local.date() != end_local.date():
-        raise HTTPException(status_code=400, detail="Reservation must be within a single local day (Europe/Helsinki).")
-
-    if not (BUSINESS_START <= start_local.timetz().replace(tzinfo=None) <= BUSINESS_END):
-        raise HTTPException(status_code=400, detail="Reservation start must be within office hours 08:00–16:00.")
-
-    if not (BUSINESS_START <= end_local.timetz().replace(tzinfo=None) <= BUSINESS_END):
-        raise HTTPException(status_code=400, detail="Reservation end must be within office hours 08:00–16:00.")
-
-    if start_local.time() == BUSINESS_END:
-        raise HTTPException(status_code=400, detail="Reservation cannot start at 16:00 (office closes).")
+    validate_30_min_blocks_local(start_local, end_local)
+    validate_duration_limits(start_utc, end_utc)
+    validate_single_local_day(start_local, end_local)
+    validate_business_hours_local(start_local, end_local)
 
 
 class CreateReservationRequest(BaseModel):
