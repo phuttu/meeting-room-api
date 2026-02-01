@@ -22,10 +22,38 @@ ROOMS: Final[set[str]] = {"A", "B"}
 
 
 def now_utc() -> datetime:
+    """
+    Returns the current timestamp in UTC.
+
+    Returns
+    -------
+    now: datetime
+        Current time as timezone-aware datetime in UTC.
+    """
     return datetime.now(timezone.utc)
 
-
 def ensure_room(room_id: str) -> str:
+    """
+    Normalizes and validates the room identifier.
+
+    The room id is normalized to uppercase and checked against the allowed rooms.
+    Raises an HTTP 404 error if the room is not supported.
+
+    Parameters
+    ----------
+    room_id: str
+        Room identifier from the request path (case-insensitive).
+
+    Returns
+    -------
+    room_id: str
+        Normalized room identifier (uppercase), guaranteed to be in ROOMS.
+
+    Raises
+    ------
+    HTTPException
+        If the room id is not found among the allowed rooms.
+    """
     room_id = room_id.upper()
     if room_id not in ROOMS:
         raise HTTPException(
@@ -37,8 +65,25 @@ def ensure_room(room_id: str) -> str:
 
 def parse_iso_to_utc(iso_str: str) -> datetime:
     """
-    Accepts ISO 8601 string. If naive (no offset), treat as Europe/Helsinki local time.
-    Returns timezone-aware datetime in UTC.
+    Parses an ISO 8601 timestamp into a timezone-aware UTC datetime.
+
+    If the input timestamp is naive (no timezone offset), it is interpreted as
+    Europe/Helsinki local time. The returned datetime is always normalized to UTC.
+
+    Parameters
+    ----------
+    iso_str: str
+        Timestamp in ISO 8601 format. Naive timestamps are treated as Europe/Helsinki.
+
+    Returns
+    -------
+    dt_utc: datetime
+        Timezone-aware datetime in UTC.
+
+    Raises
+    ------
+    HTTPException
+        If the input is not a valid ISO 8601 timestamp.
     """
     try:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
@@ -47,23 +92,88 @@ def parse_iso_to_utc(iso_str: str) -> datetime:
 
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=APP_TZ)
-
-    # Convert to UTC for normalized storage/comparison
     return dt.astimezone(timezone.utc)
 
 
 def to_helsinki(dt_utc: datetime) -> datetime:
+    """
+    Converts a UTC datetime to Europe/Helsinki local time.
+
+    If the given datetime is naive (no timezone information), it is assumed
+    to be in UTC before conversion.
+
+    Parameters
+    ----------
+    dt_utc: datetime
+        Datetime in UTC or naive datetime assumed to be UTC.
+
+    Returns
+    -------
+    dt_local: datetime
+        Timezone-aware datetime converted to Europe/Helsinki local time.
+    """
     if dt_utc.tzinfo is None:
         dt_utc = dt_utc.replace(tzinfo=timezone.utc)
     return dt_utc.astimezone(APP_TZ)
 
 
 def overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
-    # Half-open intervals [start, end)
+    """
+    Checks whether two time intervals overlap.
+
+    The intervals are treated as half-open intervals: [start, end),
+    meaning the start time is inclusive and the end time is exclusive.
+
+    Parameters
+    ----------
+    a_start: datetime
+        Start time of the first interval.
+    a_end: datetime
+        End time of the first interval.
+    b_start: datetime
+        Start time of the second interval.
+    b_end: datetime
+        End time of the second interval.
+
+    Returns
+    -------
+    overlaps: bool
+        True if the intervals overlap, False otherwise.
+    """
     return a_start < b_end and b_start < a_end
 
 
 def validate_business_rules(start_utc: datetime, end_utc: datetime) -> None:
+    """
+    Validates business rules for a room reservation time interval.
+
+    The function enforces logical time ordering, prevents reservations in the past,
+    restricts reservations to business hours (08:00–16:00 Europe/Helsinki),
+    requires 30-minute time blocks, and enforces minimum and maximum duration limits.
+
+    Parameters
+    ----------
+    start_utc: datetime
+        Reservation start time as a timezone-aware datetime in UTC.
+    end_utc: datetime
+        Reservation end time as a timezone-aware datetime in UTC.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If any of the business rules are violated, including:
+        - start time is not before end time
+        - reservation starts in the past
+        - times are not aligned to 30-minute blocks (xx:00 or xx:30)
+        - duration is shorter than 30 minutes or longer than 8 hours
+        - reservation spans multiple local days
+        - reservation is outside office hours (08:00–16:00 Europe/Helsinki)
+        - reservation starts at closing time (16:00)
+    """
     if start_utc >= end_utc:
         raise HTTPException(status_code=400, detail="Start time must be before end time.")
 
@@ -75,8 +185,8 @@ def validate_business_rules(start_utc: datetime, end_utc: datetime) -> None:
     # Convert to Helsinki local time for local rules (also used for business-hour checks)
     start_local = to_helsinki(start_utc)
     end_local = to_helsinki(end_utc)
-    
-    # Allow reservations only in 30-minute blocks in Helsinki local time (xx:00 or xx:30)
+
+    # Allow reservations only in 30-minute blocks in Helsinki local time (xx:00 or xx:30)    
     if start_local.minute % 30 != 0 or end_local.minute % 30 != 0:
         raise HTTPException(
             status_code=400,
@@ -104,11 +214,24 @@ def validate_business_rules(start_utc: datetime, end_utc: datetime) -> None:
 
 
 class CreateReservationRequest(BaseModel):
+    """
+    Request model for creating a new room reservation.
+
+    The start and end times must be provided in ISO 8601 format.
+    If the timestamp does not include a timezone offset, it is
+    interpreted as Europe/Helsinki local time.
+    """
     start: str = Field(..., description="ISO 8601 datetime (local Europe/Helsinki if no offset)")
     end: str = Field(..., description="ISO 8601 datetime (local Europe/Helsinki if no offset)")
 
 
 class ReservationResponse(BaseModel):
+    """
+    Response model representing a room reservation.
+
+    All timestamps are returned in ISO 8601 format using
+    Europe/Helsinki local time.
+    """
     id: str
     room: str
     start: str  # ISO 8601 in Europe/Helsinki
@@ -117,6 +240,12 @@ class ReservationResponse(BaseModel):
 
 @dataclass(frozen=True)
 class Reservation:
+    """
+    Internal domain model representing a room reservation.
+
+    The reservation times are stored internally in UTC to ensure
+    consistent comparison and overlap detection.
+    """
     id: str
     room: str
     start_utc: datetime
@@ -124,15 +253,69 @@ class Reservation:
 
 
 class InMemoryStore:
+    """
+    Thread-safe in-memory storage for room reservations.
+
+    Reservations are stored per room and kept in UTC for consistent
+    comparison and overlap detection. This storage is intended for
+    demo and development use only (no persistence).
+    """
     def __init__(self) -> None:
+        """
+        Initializes the in-memory reservation store.
+
+        Creates an empty reservation list for each supported room and
+        initializes a lock to ensure thread-safe access.
+        """
         self._lock: Lock = Lock()
         self._by_room: Dict[str, List[Reservation]] = {room: [] for room in ROOMS}
 
     def list_room(self, room: str) -> List[Reservation]:
+        """
+        Returns all reservations for a given room.
+
+        The reservations are returned sorted by start time in ascending order.
+
+        Parameters
+        ----------
+        room: str
+            Normalized room identifier.
+
+        Returns
+        -------
+        reservations: List[Reservation]
+            List of reservations for the room, sorted by start time.
+        """
         with self._lock:
             return sorted(self._by_room[room], key=lambda r: r.start_utc)
 
     def create(self, room: str, start_utc: datetime, end_utc: datetime) -> Reservation:
+        """
+        Creates a new reservation for a room.
+
+        The reservation is validated against business rules and checked
+        for overlaps with existing reservations in the same room.
+
+        Parameters
+        ----------
+        room: str
+            Normalized room identifier.
+        start_utc: datetime
+            Reservation start time in UTC.
+        end_utc: datetime
+            Reservation end time in UTC.
+
+        Returns
+        -------
+        reservation: Reservation
+            The newly created reservation.
+
+        Raises
+        ------
+        HTTPException
+            If business rules are violated or the reservation overlaps
+            with an existing reservation in the same room.
+        """
         validate_business_rules(start_utc, end_utc)
 
         with self._lock:
@@ -144,18 +327,46 @@ class InMemoryStore:
                         detail="Reservation overlaps with an existing reservation in the same room.",
                     )
 
-            new_res = Reservation(id=str(uuid4()), room=room, start_utc=start_utc, end_utc=end_utc)
+            new_res = Reservation(
+                id=str(uuid4()),
+                room=room,
+                start_utc=start_utc,
+                end_utc=end_utc,
+            )
             existing.append(new_res)
             return new_res
 
     def delete(self, room: str, reservation_id: str) -> None:
+        """
+        Deletes an existing reservation from a room.
+
+        Parameters
+        ----------
+        room: str
+            Normalized room identifier.
+        reservation_id: str
+            Unique identifier of the reservation to delete.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        HTTPException
+            If the reservation with the given id does not exist.
+        """
         with self._lock:
             reservations = self._by_room[room]
             for i, r in enumerate(reservations):
                 if r.id == reservation_id:
                     reservations.pop(i)
                     return
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reservation not found.")
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reservation not found.",
+        )
 
 
 store = InMemoryStore()
@@ -163,9 +374,30 @@ app = FastAPI(title="Meeting Room Booking API", version="1.0.0")
 
 
 def to_response(r: Reservation) -> ReservationResponse:
+    """
+    Converts an internal Reservation object into an API response model.
+
+    The reservation timestamps are converted from UTC to Europe/Helsinki
+    local time and formatted as ISO 8601 strings.
+
+    Parameters
+    ----------
+    r: Reservation
+        Internal reservation domain object with UTC timestamps.
+
+    Returns
+    -------
+    response: ReservationResponse
+        Reservation response model with timestamps in Europe/Helsinki local time.
+    """
     start_local = to_helsinki(r.start_utc).isoformat()
     end_local = to_helsinki(r.end_utc).isoformat()
-    return ReservationResponse(id=r.id, room=r.room, start=start_local, end=end_local)
+    return ReservationResponse(
+        id=r.id,
+        room=r.room,
+        start=start_local,
+        end=end_local,
+    )
 
 
 @app.post(
@@ -178,6 +410,32 @@ def create_reservation(
     room_id: str = Path(..., description="Room id (A or B)"),
     body: CreateReservationRequest = ...,
 ) -> ReservationResponse:
+    """
+    Creates a new reservation for a given room.
+
+    The request body must contain start and end times in ISO 8601 format.
+    Business rules and overlap checks are applied before the reservation
+    is stored.
+
+    Parameters
+    ----------
+    room_id: str
+        Room identifier from the request path.
+    body: CreateReservationRequest
+        Request payload containing reservation start and end times.
+
+    Returns
+    -------
+    reservation: ReservationResponse
+        The newly created reservation with timestamps in Europe/Helsinki
+        local time.
+
+    Raises
+    ------
+    HTTPException
+        If the room does not exist, business rules are violated, or the
+        reservation overlaps with an existing reservation.
+    """
     room = ensure_room(room_id)
     start_utc = parse_iso_to_utc(body.start)
     end_utc = parse_iso_to_utc(body.end)
@@ -193,6 +451,29 @@ def create_reservation(
 def list_reservations(
     room_id: str = Path(..., description="Room id (A or B)")
 ) -> list[ReservationResponse]:
+    """
+    Returns all reservations for a given room.
+
+    The reservations are returned in ascending order by start time.
+    This endpoint returns all reservations regardless of whether they
+    are in the past or future.
+
+    Parameters
+    ----------
+    room_id: str
+        Room identifier from the request path.
+
+    Returns
+    -------
+    reservations: list[ReservationResponse]
+        List of reservations for the room with timestamps in
+        Europe/Helsinki local time.
+
+    Raises
+    ------
+    HTTPException
+        If the room does not exist.
+    """
     room = ensure_room(room_id)
     reservations = store.list_room(room)
     return [to_response(r) for r in reservations]
@@ -205,6 +486,25 @@ def delete_reservation(
     room_id: str = Path(..., description="Room id (A or B)"),
     reservation_id: str = Path(..., description="Reservation id (UUID)"),
 ) -> None:
+    """
+    Deletes an existing reservation from a room.
+
+    Parameters
+    ----------
+    room_id: str
+        Room identifier from the request path.
+    reservation_id: str
+        Unique identifier of the reservation to delete.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If the room does not exist or the reservation cannot be found.
+    """
     room = ensure_room(room_id)
     store.delete(room, reservation_id)
     return None
