@@ -196,6 +196,10 @@ def list_reservations(
     reservations = store.list_room(room)
     return [to_response(r) for r in reservations]
 
+@app.delete(
+    "/rooms/{room_id}/reservations/{reservation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 def delete_reservation(
     room_id: str = Path(..., description="Room id (A or B)"),
     reservation_id: str = Path(..., description="Reservation id (UUID)"),
