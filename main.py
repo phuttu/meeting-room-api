@@ -2,23 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
-from typing import Dict, List, Final
+from threading import Lock
+from typing import Final
 from uuid import uuid4
+
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Path, status
 from pydantic import BaseModel, Field
-from zoneinfo import ZoneInfo
-from threading import Lock
-
 
 APP_TZ = ZoneInfo("Europe/Helsinki")
+
 BUSINESS_START = time(8, 0)
 BUSINESS_END = time(16, 0)
+
 MIN_DURATION = timedelta(minutes=30)
 MAX_DURATION = timedelta(hours=8)
 
 ROOMS: Final[set[str]] = {"A", "B"}
-
 
 def now_utc() -> datetime:
     """
