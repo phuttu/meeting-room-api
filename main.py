@@ -643,3 +643,14 @@ def delete_reservation(
     room = ensure_room(room_id)
     store.delete(room, reservation_id)
     return None
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+    )
