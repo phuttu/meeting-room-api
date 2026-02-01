@@ -34,23 +34,23 @@ heikkouksia, jotka vaativat kriittistä tarkastelua ja korjaamista.
 
 Keskeisimmät ongelmat olivat:
 
-- **Luettavuus ja johdonmukaisuus**  
+1. Luettavuus ja johdonmukaisuus  
   Koodi oli aluksi vaikeasti hahmotettavaa: funktiot olivat pitkiä, vastuut
   sekoittuivat ja nimeäminen ei ollut kaikkialla yhtä selkeää.
 
-- **Epäjohdonmukaiset tyypitykset**  
+2. Epäjohdonmukaiset tyypitykset  
   Osa funktioista ja endpointeista käytti tyyppivihjeitä, mutta osa ei.
   Tämä heikensi koodin laatua ja vaikeutti ymmärtämistä, vaikka muuten
   tyyppivihjeitä oli käytössä.
 
-- **Liian karkeat oletukset liiketoimintalogiikassa**  
+3. Liian karkeat oletukset liiketoimintalogiikassa
   Esimerkiksi:
   - menneisyyden tarkistus tehtiin aluksi sekuntitasolla, mikä esti käytännössä
     tasatunnin varaukset
   - 30 minuutin aikablokit tarkistettiin ensin UTC-ajassa, mikä johti virheisiin
     kesä- ja talviajan vaihtuessa
 
-- **Yhden vastuun periaatteen rikkominen**  
+4. Yhden vastuun periaatteen rikkominen
   Tekoälyn alkuperäinen `validate_business_rules`-funktio sisälsi liian monta
   erillistä tarkistusta, mikä teki siitä vaikeasti testattavan ja ylläpidettävän.
 ```
@@ -60,27 +60,27 @@ Keskeisimmät ongelmat olivat:
 Projektin aikana tekoälyn tuottamaa koodia muokattiin ja refaktoroitiin merkittävästi.
 Tärkeimmät parannukset olivat:
 
-### 1. Liiketoimintalogiikan tarkentaminen
+1. Liiketoimintalogiikan tarkentaminen
 - Menneisyyden tarkistus muutettiin sallimaan varauksen aloitus kuluvan minuutin alusta
 - 30 minuutin aikablokkivalidaatio siirrettiin tarkistettavaksi
   Europe/Helsinki-paikallisajassa
 - Näillä muutoksilla logiikka vastaa paremmin todellista käyttötarvetta
 
-### 2. Funktioiden pilkkominen
+2. Funktioiden pilkkominen
 - Pitkä `validate_business_rules` pilkottiin pienempiin, selkeästi nimettyihin
   apufunktioihin
 - Tämä paransi luettavuutta, testattavuutta ja yhden vastuun periaatteen noudattamista
 
-### 3. Tyypitysten lisääminen
+3. Tyypitysten lisääminen
 - Kaikki FastAPI-endpointit ja keskeiset funktiot saivat eksplisiittiset paluuarvon tyypitykset
 - Tämä teki koodista johdonmukaisempaa ja helpommin ymmärrettävää
 
-### 4. Dokumentaation ja testien lisääminen
+4. Dokumentaation ja testien lisääminen
 - Funktioihin lisättiin kattavat docstringit yhtenäisellä tyylillä
 - Pytest-testit lisättiin varauksen luontiin, listaukseen ja poistoon
 - Testit varmistavat, että logiikka toimii myös refaktorointien jälkeen
 
-### 5. Koodin yleinen siistiminen
+5. Koodin yleinen siistiminen
 - Importtien järjestys korjattiin
 - Käyttämättömät importit poistettiin
 - Rivinvaihdot ja rakenne yhtenäistettiin
