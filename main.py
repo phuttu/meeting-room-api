@@ -8,7 +8,6 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Path, status
 from pydantic import BaseModel, Field
 from zoneinfo import ZoneInfo
-import threading
 from threading import Lock
 
 
