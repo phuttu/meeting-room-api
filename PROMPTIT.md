@@ -1,11 +1,23 @@
 # Promptit ja tekoälyn käyttö
-
+```text
 Tässä dokumentissa kuvataan, miten tekoälyä (ChatGPT) hyödynnettiin
 Meeting Room Booking API -projektin toteutuksessa.
 
+Oletukset:
+-Huoneita on kaksi: A ja B
+-Varaukset tehdään toimiston paikallisajassa (Europe/Helsinki)
+-Aikaleimat annetaan ISO 8601 -muodossa
+-Ei autentikointia tai käyttäjähallintaa
+-Varaukset ovat sallittuja vain virka-aikaan (08:00–16:00)
+-Varauksen kesto on vähintään 30 minuuttia ja enintään 8 tuntia
+-Varaus on tehtävä 30 minuutin aikablokeissa (xx:00 tai xx:30)
+-Varaus voi olla tuleville päiville
+-Minuutin aikaikkuna varaukseen (voi varata esim klo 13.00 vaikka olisi puoli min yli)
+```
 ---
 
-**Prompti**
+### Prompti
+```text
 Toteuta yksinkertainen kokoushuoneiden varausrajapinta (API). 
 Toiminnallisuudet: 
 API:n tulee tarjota seuraavat endpointit: 
@@ -24,13 +36,15 @@ Tekniset rajaukset:
 
  Oletukset: 
 -Huoneita on kaksi: A ja B
- -Varaukset tehdään toimiston paikallisajassa (Europe/Helsinki) 
+-Varaukset tehdään toimiston paikallisajassa (Europe/Helsinki) 
 -Aikaleimat annetaan ISO 8601 -muodossa
- -Ei autentikointia tai käyttäjähallintaa 
+-Ei autentikointia tai käyttäjähallintaa 
 -Varaukset ovat sallittuja vain virka-aikaan (08:00–16:00) 
 -Varauksen kesto on vähintään 30 minuuttia ja enintään 8 tuntia -Varaus voi olla tuleville päiville
+```
 
-**Vastaus**
+### Vastaus
+```python
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -221,41 +235,53 @@ def delete_reservation(
     room = ensure_room(room_id)
     store.delete(room, reservation_id)
     return None
+```
 
-**Prompti**
+### Prompti
+```text
 Koodin logiikka ei salli tällä hetkellä varausta ajalle klo. 13.00 jos varaus tehdään esimerkiksi muutaman sekunnin sen jälkeen. Tämä on periaatteessa menneisyydessä, mutta muokataan koodia niin että varaus hyväksytään minuutin aikaikkunalla. Silloin huoneen voi varata vielä "nykyhetkeen" jos kello näyttää varaushetkellä 13.00
+```
 
-**Vastaus**
-Etsi tämä kohta:
+### Vastaus
+```python
+#Etsi tämä kohta:
 if start_utc < now_utc():
     raise HTTPException(status_code=400, detail="Reservation start time cannot be in the past.")
 
-ja korvaa se tällä:
+#ja korvaa se tällä:
 Kopioi koodi
 now = now_utc()
 now_floor_to_minute = now.replace(second=0, microsecond=0)
 
 if start_utc < now_floor_to_minute:
     raise HTTPException(status_code=400, detail="Reservation start time cannot be in the past.")
+```
 
-**Prompti**
+### Prompti
+```text
 Nykyinen logiikka sallii varaukset mihin tahansa minuuttiin (esim. 13:10–14:45). Korjaa varauslogiikka niin, että varaukset ovat sallittuja vain 30 minuutin lohkoissa (aloitus ja lopetus vain klo xx:00 tai xx:30). Älä muuta muuta logiikkaa.
+```
 
-**Vastaus**
+### Vastaus
+```python
 # Allow reservations only in 30-minute blocks (xx:00 or xx:30)
 if start_utc.minute % 30 != 0 or end_utc.minute % 30 != 0:
     raise HTTPException(
         status_code=400,
         detail="Reservations must start and end at 30-minute intervals (xx:00 or xx:30)."
     )
+```
 
-**Prompti**
+### Prompti
+```text
 Nykyinen 30 minuutin aikablokkivalidaatio tehdään UTC-ajassa.
 Korjaa logiikka niin, että 30 minuutin lohkot tarkistetaan Europe/Helsinki-paikallisajassa
 (aloitus ja lopetus vain klo xx:00 tai xx:30 paikallista aikaa).
 Älä muuta muuta varauslogiikkaa.
+```
 
-**Vastaus**
+### Vastaus
+```python
 # Convert to Helsinki local time for local rules
 start_local = to_helsinki(start_utc)
 end_local = to_helsinki(end_utc)
@@ -266,11 +292,15 @@ if start_local.minute % 30 != 0 or end_local.minute % 30 != 0:
         status_code=400,
         detail="Reservations must start and end at 30-minute intervals (xx:00 or xx:30)."
     )
+```
 
-**Prompti**
+### Prompti
+```text
 Lisää FastAPI-endpointteihin eksplisiittiset paluuarvon tyypitykset
+```
 
-**Vastaus**
+### Vastaus
+```python
 def create_reservation(
     room_id: str = Path(..., description="Room id (A or B)"),
     body: CreateReservationRequest = ...,
@@ -284,13 +314,17 @@ def delete_reservation(
     room_id: str = Path(..., description="Room id (A or B)"),
     reservation_id: str = Path(..., description="Reservation id (UUID)"),
 ) -> None:
+```
 
-**Prompti**
+### Prompti
+```text
 Pilko validate_business_rules-funktio pienempiin, selkeästi nimettyihin apufunktioihin yhden vastuun periaatteen mukaisesti.
 Säilytä nykyinen toiminnallisuus ja poikkeuskäytös muuttumattomana.
 Lisää jokaiselle uudelle funktiolle kattavat docstringit nykyisen dokumentaatiotyylin mukaisesti.
+```
 
-**Vastaus**
+### Vastaus
+```python
 def validate_time_order(start_utc: datetime, end_utc: datetime) -> None:
     """
     Validates that the reservation start time is before the end time.
@@ -488,11 +522,15 @@ def validate_business_rules(start_utc: datetime, end_utc: datetime) -> None:
     validate_duration_limits(start_utc, end_utc)
     validate_single_local_day(start_local, end_local)
     validate_business_hours_local(start_local, end_local)
+```
 
-**Prompti**
+### Prompti
+```text
 Kirjoita pytest-testit FastAPI-sovellukselle varauksen luontiin. Testaa onnistunut varaus sekä virhetilanteet (päällekkäinen varaus, virheellinen aikaväli, olematon huone).
+```
 
-**Vastaus**
+### Vastaus
+```python
 import pytest
 from fastapi.testclient import TestClient
 
@@ -575,13 +613,17 @@ def test_create_reservation_nonexistent_room():
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+```
 
-**Prompti**
+### Prompti
+```text
 Kirjoita pytest-testit varauslistauksen endpointille.
 Testaa, että huoneen varaukset palautuvat oikeassa järjestyksessä ja oikeassa muodossa.
 Älä suodata menneitä varauksia.
+```
 
-**Vastaus**
+### Vastaus
+```python
 import pytest
 from fastapi.testclient import TestClient
 from datetime import datetime, timezone, timedelta
@@ -669,11 +711,15 @@ def test_list_reservations_includes_past_reservations():
 
     # Both past and future reservations must be returned
     assert len(data) == 2
+```
 
-**Prompti**
+### Prompti
+```text
 Kirjoita pytest-testit varauksen poistoon. Testaa onnistunut poisto sekä virhetilanne, jossa varausta ei löydy. Varmista, että poistettu varaus ei enää näy listauksessa. Kokeile molempia: huone A ja B
+```
 
-**Vastaus**
+### Vastaus
+```python
 import pytest
 from fastapi.testclient import TestClient
 
@@ -756,4 +802,4 @@ def test_delete_only_affects_correct_room(room: str):
 
     assert len(data_other) == 1
     assert data_other[0]["id"] == other_id
-
+```
