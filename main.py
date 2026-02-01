@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
-from typing import Dict, List
+from typing import Dict, List, Final
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Path, status
 from pydantic import BaseModel, Field
 from zoneinfo import ZoneInfo
 import threading
+from threading import Lock
 
 
 APP_TZ = ZoneInfo("Europe/Helsinki")
@@ -17,7 +18,7 @@ BUSINESS_END = time(16, 0)
 MIN_DURATION = timedelta(minutes=30)
 MAX_DURATION = timedelta(hours=8)
 
-ROOMS = {"A", "B"}
+ROOMS: Final[set[str]] = {"A", "B"}
 
 
 def now_utc() -> datetime:
@@ -124,7 +125,7 @@ class Reservation:
 
 class InMemoryStore:
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        self._lock: Lock = Lock()
         self._by_room: Dict[str, List[Reservation]] = {room: [] for room in ROOMS}
 
     def list_room(self, room: str) -> List[Reservation]:
