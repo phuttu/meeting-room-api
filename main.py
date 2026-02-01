@@ -21,6 +21,7 @@ MAX_DURATION = timedelta(hours=8)
 
 ROOMS: Final[set[str]] = {"A", "B"}
 
+
 def now_utc() -> datetime:
     """
     Returns the current timestamp in UTC.
@@ -31,6 +32,7 @@ def now_utc() -> datetime:
         Current time as timezone-aware datetime in UTC.
     """
     return datetime.now(timezone.utc)
+
 
 def ensure_room(room_id: str) -> str:
     """
@@ -260,6 +262,8 @@ class InMemoryStore:
     comparison and overlap detection. This storage is intended for
     demo and development use only (no persistence).
     """
+
+
     def __init__(self) -> None:
         """
         Initializes the in-memory reservation store.
@@ -269,6 +273,7 @@ class InMemoryStore:
         """
         self._lock: Lock = Lock()
         self._by_room: Dict[str, List[Reservation]] = {room: [] for room in ROOMS}
+
 
     def list_room(self, room: str) -> List[Reservation]:
         """
@@ -288,6 +293,7 @@ class InMemoryStore:
         """
         with self._lock:
             return sorted(self._by_room[room], key=lambda r: r.start_utc)
+
 
     def create(self, room: str, start_utc: datetime, end_utc: datetime) -> Reservation:
         """
@@ -335,6 +341,7 @@ class InMemoryStore:
             )
             existing.append(new_res)
             return new_res
+
 
     def delete(self, room: str, reservation_id: str) -> None:
         """
@@ -405,7 +412,6 @@ def to_response(r: Reservation) -> ReservationResponse:
     response_model=ReservationResponse,
     status_code=status.HTTP_201_CREATED,
 )
-
 def create_reservation(
     room_id: str = Path(..., description="Room id (A or B)"),
     body: CreateReservationRequest = ...,
@@ -447,7 +453,6 @@ def create_reservation(
     "/rooms/{room_id}/reservations",
     response_model=list[ReservationResponse],
 )
-
 def list_reservations(
     room_id: str = Path(..., description="Room id (A or B)")
 ) -> list[ReservationResponse]:
@@ -477,6 +482,7 @@ def list_reservations(
     room = ensure_room(room_id)
     reservations = store.list_room(room)
     return [to_response(r) for r in reservations]
+
 
 @app.delete(
     "/rooms/{room_id}/reservations/{reservation_id}",
